@@ -1,7 +1,3 @@
-// @ts-ignore -- dotenv v17 types
-import dotenv from "dotenv";
-dotenv.config();
-
 import { client } from "./client.js";
 import { config } from "./config.js";
 import { commands } from "./commands/index.js";
