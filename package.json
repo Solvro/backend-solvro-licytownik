@@ -6,7 +6,7 @@
   "main": "dist/index.js",
   "scripts": {
     "dev": "tsx --env-file=.env src/index.ts",
-    "build": "tsup src/index.ts --format esm --dts",
+    "build": "tsup src/index.ts --format esm",
     "start": "node --env-file=.env dist/index.js",
     "deploy-commands": "tsx --env-file=.env src/utils/deploy-commands.ts",
     "db:generate": "drizzle-kit generate --config=drizzle.config.ts",
