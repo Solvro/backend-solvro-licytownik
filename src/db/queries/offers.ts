@@ -10,7 +10,7 @@ export async function createOffer(forumPostId: string, channelId: string, title:
       forumPostId,
       channelId,
       title,
-      createdAt: Date.now(),
+      createdAt: Math.floor(Date.now() / 1000),
     })
     .returning();
   return rows[0];

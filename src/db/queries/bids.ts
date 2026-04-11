@@ -18,7 +18,7 @@ export async function insertBid(
       userName,
       itemId,
       quantity,
-      createdAt: Date.now(),
+      createdAt: Math.floor(Date.now() / 1000),
     })
     .returning();
   return rows[0];
