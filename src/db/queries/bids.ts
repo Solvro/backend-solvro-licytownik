@@ -1,6 +1,6 @@
 import { eq, sql } from "drizzle-orm";
 import { db } from "../index.js";
-import { bids, items } from "../schema.js";
+import { bids, items, offers } from "../schema.js";
 import type { BidRow } from "../types.js";
 
 export async function insertBid(
@@ -99,4 +99,16 @@ export async function getOfferIdsWithItem(itemId: number) {
     .selectDistinct({ offerId: bids.offerId })
     .from(bids)
     .where(eq(bids.itemId, itemId));
+}
+
+export async function getUserOfferIds(userId: string) {
+  return await db
+    .selectDistinct({
+      offerId: bids.offerId,
+      forumPostId: offers.forumPostId,
+      title: offers.title,
+    })
+    .from(bids)
+    .innerJoin(offers, eq(bids.offerId, offers.id))
+    .where(eq(bids.userId, userId));
 }
