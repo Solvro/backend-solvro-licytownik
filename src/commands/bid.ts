@@ -6,7 +6,7 @@ import {
 import type { Command } from "../types/command.js";
 import { config } from "../config.js";
 import { getAllItems, getItemBySlug } from "../db/queries/items.js";
-import { getGlobalUsage, insertBid } from "../db/queries/bids.js";
+import { getGlobalUsage, getLastBidder, insertBid } from "../db/queries/bids.js";
 import { getOfferByThreadId, createOffer } from "../db/queries/offers.js";
 import { isBiddingEnabled } from "../db/queries/settings.js";
 import { updateSummaryMessage } from "../utils/summary.js";
@@ -134,11 +134,17 @@ export const bidCommand: Command = {
       (member && "displayName" in member ? member.displayName : null) ??
       interaction.user.displayName ??
       interaction.user.username;
+    const previousWinner = await getLastBidder(offer.id);
     await insertBid(offer.id, interaction.user.id, userName, item.id, quantity);
 
-    await interaction.reply({
-      content: `${item.emoji ?? ""} **${userName}** licytuje +${quantity} ${item.displayName} (${item.unit})!`,
-    });
+    let content = `${item.emoji ?? ""} **${userName}** licytuje +${quantity} ${item.displayName}`;
+    if (previousWinner && previousWinner.userId !== interaction.user.id) {
+      content += ` przebijajac <@${previousWinner.userId}>!`;
+    } else {
+      content += `!`;
+    }
+
+    await interaction.reply({ content });
 
     await updateSummaryMessage(channel, offer);
   },
