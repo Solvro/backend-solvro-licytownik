@@ -57,6 +57,16 @@ export async function getRecentBids(offerId: number, limit = 10) {
     .limit(limit);
 }
 
+export async function getLastBidTime(offerId: number): Promise<number | null> {
+  const rows = await db
+    .select({ createdAt: bids.createdAt })
+    .from(bids)
+    .where(eq(bids.offerId, offerId))
+    .orderBy(sql`${bids.createdAt} DESC`)
+    .limit(1);
+  return rows[0]?.createdAt ?? null;
+}
+
 export async function getLastBidder(offerId: number) {
   const rows = await db
     .select({

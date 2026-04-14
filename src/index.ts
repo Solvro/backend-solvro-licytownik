@@ -6,6 +6,7 @@ import { registerInteractionEvent } from "./events/interactionCreate.js";
 import { registerThreadCreateEvent } from "./events/threadCreate.js";
 import { seedItems } from "./db/seed.js";
 import { db, isPostgres } from "./db/index.js";
+import { startAutoCloseLoop } from "./utils/auto-close.js";
 
 // Run migrations
 if (isPostgres) {
@@ -28,6 +29,9 @@ for (const command of commands) {
 registerReadyEvent(client);
 registerInteractionEvent(client);
 registerThreadCreateEvent(client);
+
+// Start background tasks
+client.once("ready", () => startAutoCloseLoop(client));
 
 // Login
 client.login(config.BOT_TOKEN);

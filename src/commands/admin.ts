@@ -9,6 +9,11 @@ import type { Command } from "../types/command.js";
 import { config } from "../config.js";
 import { setSetting } from "../db/queries/settings.js";
 import {
+  getAutoCloseConfig,
+  parsePlDatetime,
+  formatPlDatetime,
+} from "../utils/auto-close.js";
+import {
   getOfferByThreadId,
   getOfferById,
   getAllOffers,
@@ -111,6 +116,27 @@ export const adminCommand: Command = {
     )
     .addSubcommand((sub) =>
       sub
+        .setName("auto-close")
+        .setDescription("Skonfiguruj automatyczne zamykanie ofert po nieaktywnosci")
+        .addBooleanOption((opt) =>
+          opt.setName("enabled").setDescription("Wlacz/wylacz automatyczne zamykanie").setRequired(true)
+        )
+        .addStringOption((opt) =>
+          opt
+            .setName("datetime")
+            .setDescription("Data startu w formacie DD.MM.YYYY HH:mm")
+            .setRequired(false)
+        )
+        .addIntegerOption((opt) =>
+          opt
+            .setName("min-after-inactivity")
+            .setDescription("Minuty nieaktywnosci po ktorych oferta sie zamyka")
+            .setRequired(false)
+            .setMinValue(1)
+        )
+    )
+    .addSubcommand((sub) =>
+      sub
         .setName("bids-summary")
         .setDescription("Pokaz wygrane oferty i zagregowane przedmioty per uzytkownik")
         .addUserOption((opt) =>
@@ -170,6 +196,8 @@ export const adminCommand: Command = {
         return handleViewLimits(interaction);
       case "bids-summary":
         return handleBidsSummary(interaction);
+      case "auto-close":
+        return handleAutoClose(interaction);
     }
   },
 };
@@ -476,4 +504,57 @@ async function handleBidsSummary(interaction: ChatInputCommandInteraction) {
     .setTimestamp();
 
   await interaction.editReply({ embeds: [embed] });
+}
+
+async function handleAutoClose(interaction: ChatInputCommandInteraction) {
+  const enabled = interaction.options.getBoolean("enabled", true);
+  const datetimeStr = interaction.options.getString("datetime");
+  const minInactivity = interaction.options.getInteger("min-after-inactivity");
+
+  if (!enabled) {
+    await setSetting("auto_close_enabled", "false");
+    await interaction.reply({
+      content: "Automatyczne zamykanie ofert zostalo **wylaczone**.",
+      ephemeral: true,
+    });
+    return;
+  }
+
+  const current = await getAutoCloseConfig();
+
+  let datetimeUnix = current.datetime;
+  if (datetimeStr) {
+    const parsed = parsePlDatetime(datetimeStr);
+    if (!parsed) {
+      await interaction.reply({
+        content: "Nieprawidlowy format daty. Uzyj `DD.MM.YYYY HH:mm` (np. `14.04.2026 12:00`).",
+        ephemeral: true,
+      });
+      return;
+    }
+    datetimeUnix = parsed;
+  }
+
+  let inactivitySec = current.inactivity;
+  if (minInactivity !== null) {
+    inactivitySec = minInactivity * 60;
+  }
+
+  if (!datetimeUnix || !inactivitySec) {
+    await interaction.reply({
+      content:
+        "Przy pierwszym wlaczeniu musisz podac `datetime` oraz `min-after-inactivity`.",
+      ephemeral: true,
+    });
+    return;
+  }
+
+  await setSetting("auto_close_enabled", "true");
+  await setSetting("auto_close_datetime", String(datetimeUnix));
+  await setSetting("auto_close_inactivity_sec", String(inactivitySec));
+
+  await interaction.reply({
+    content: `Automatyczne zamykanie **wlaczone**.\nStart: **${formatPlDatetime(datetimeUnix)}**\nNieaktywnosc: **${Math.round(inactivitySec / 60)} min**`,
+    ephemeral: true,
+  });
 }
