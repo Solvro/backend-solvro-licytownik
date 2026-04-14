@@ -3,6 +3,7 @@ import { getSetting } from "../db/queries/settings.js";
 import { getOpenOffers, closeOffer, getOfferById } from "../db/queries/offers.js";
 import { getLastBidTime } from "../db/queries/bids.js";
 import { updateSummaryMessage } from "./summary.js";
+import { buildSummaryEmbed } from "./embeds.js";
 
 const CHECK_INTERVAL_MS = 60_000;
 
@@ -59,8 +60,10 @@ async function runCheck(client: Client) {
       if (thread?.isThread()) {
         const refreshed = await getOfferById(offer.id);
         if (refreshed) await updateSummaryMessage(thread, refreshed);
+        const embed = await buildSummaryEmbed(offer.id, offer.title);
         await thread.send({
           content: "⏰ Licytacja zostala automatycznie **zamknieta** (brak aktywnosci).",
+          embeds: [embed],
         });
       }
     } catch {

@@ -36,6 +36,7 @@ import {
   getAggregateBids,
 } from "../db/queries/bids.js";
 import { updateSummaryMessage } from "../utils/summary.js";
+import { buildSummaryEmbed } from "../utils/embeds.js";
 
 export const adminCommand: Command = {
   data: new SlashCommandBuilder()
@@ -230,7 +231,8 @@ async function handleCloseOffer(interaction: ChatInputCommandInteraction) {
   }
 
   await closeOffer(offer.id);
-  await interaction.reply({ content: "Oferta zostala **zamknieta**." });
+  const embed = await buildSummaryEmbed(offer.id, offer.title);
+  await interaction.reply({ content: "Oferta zostala **zamknieta**.", embeds: [embed] });
 }
 
 async function handleReopenOffer(interaction: ChatInputCommandInteraction) {
