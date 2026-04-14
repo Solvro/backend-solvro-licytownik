@@ -11,6 +11,7 @@ import { setSetting } from "../db/queries/settings.js";
 import {
   getOfferByThreadId,
   getOfferById,
+  getAllOffers,
   closeOffer,
   reopenOffer,
   removeOffer,
@@ -26,6 +27,8 @@ import {
   getGlobalUsageAll,
   deleteBidsByItemId,
   getOfferIdsWithItem,
+  getLastBidder,
+  getAggregateBids,
 } from "../db/queries/bids.js";
 import { updateSummaryMessage } from "../utils/summary.js";
 
@@ -108,6 +111,14 @@ export const adminCommand: Command = {
     )
     .addSubcommand((sub) =>
       sub
+        .setName("bids-summary")
+        .setDescription("Pokaz wygrane oferty i zagregowane przedmioty per uzytkownik")
+        .addUserOption((opt) =>
+          opt.setName("user").setDescription("Konkretny uzytkownik (puste = wszyscy)").setRequired(false)
+        )
+    )
+    .addSubcommand((sub) =>
+      sub
         .setName("view-limits")
         .setDescription("Pokaz limity i zuzycie przedmiotow")
         .addStringOption((opt) =>
@@ -157,6 +168,8 @@ export const adminCommand: Command = {
         return handleSetLimit(interaction);
       case "view-limits":
         return handleViewLimits(interaction);
+      case "bids-summary":
+        return handleBidsSummary(interaction);
     }
   },
 };
@@ -357,4 +370,110 @@ async function handleViewLimits(interaction: ChatInputCommandInteraction) {
 
   embed.setDescription(lines.join("\n"));
   await interaction.reply({ embeds: [embed], ephemeral: true });
+}
+
+async function handleBidsSummary(interaction: ChatInputCommandInteraction) {
+  await interaction.deferReply({ ephemeral: true });
+
+  const filterUser = interaction.options.getUser("user");
+  const allOffers = await getAllOffers();
+
+  type UserSummary = {
+    userName: string;
+    wonOffers: { offerId: number; forumPostId: string; title: string }[];
+    items: Map<number, { displayName: string; emoji: string | null; unit: string; total: number }>;
+  };
+  const byUser = new Map<string, UserSummary>();
+
+  for (const offer of allOffers) {
+    const winner = await getLastBidder(offer.id);
+    if (!winner) continue;
+    if (filterUser && winner.userId !== filterUser.id) continue;
+
+    let summary = byUser.get(winner.userId);
+    if (!summary) {
+      summary = { userName: winner.userName, wonOffers: [], items: new Map() };
+      byUser.set(winner.userId, summary);
+    }
+    summary.wonOffers.push({
+      offerId: offer.id,
+      forumPostId: offer.forumPostId,
+      title: offer.title,
+    });
+
+    const agg = await getAggregateBids(offer.id);
+    for (const row of agg) {
+      const existing = summary.items.get(row.itemId);
+      const qty = Number(row.totalQuantity);
+      if (existing) {
+        existing.total += qty;
+      } else {
+        summary.items.set(row.itemId, {
+          displayName: row.displayName,
+          emoji: row.emoji,
+          unit: row.unit,
+          total: qty,
+        });
+      }
+    }
+  }
+
+  if (byUser.size === 0) {
+    await interaction.editReply({
+      content: filterUser
+        ? `${filterUser} nie wygrywa zadnej oferty.`
+        : "Nikt jeszcze nie wygrywa zadnej oferty.",
+    });
+    return;
+  }
+
+  if (filterUser) {
+    const [userId, s] = byUser.entries().next().value!;
+    const offersList = s.wonOffers
+      .map(
+        (o) =>
+          `• [${o.title}](https://discord.com/channels/${config.GUILD_ID}/${o.forumPostId})`
+      )
+      .join("\n");
+    const itemsList = Array.from(s.items.values())
+      .sort((a, b) => a.displayName.localeCompare(b.displayName))
+      .map((i) => `${i.emoji ?? ""} **${i.displayName}**: ${i.total} ${i.unit}`)
+      .join("\n");
+
+    const embed = new EmbedBuilder()
+      .setTitle(s.userName)
+      .setColor(0x5865f2)
+      .setDescription(`<@${userId}>`)
+      .addFields(
+        { name: "Wygrywane oferty", value: offersList || "—" },
+        { name: "Przedmioty do dostarczenia", value: itemsList || "—" }
+      );
+    await interaction.editReply({ embeds: [embed] });
+    return;
+  }
+
+  const sections: string[] = [];
+  for (const [userId, s] of byUser) {
+    const offersList = s.wonOffers
+      .map(
+        (o) =>
+          `• [${o.title}](https://discord.com/channels/${config.GUILD_ID}/${o.forumPostId})`
+      )
+      .join("\n");
+    const itemsList = Array.from(s.items.values())
+      .sort((a, b) => a.displayName.localeCompare(b.displayName))
+      .map((i) => `${i.emoji ?? ""} ${i.displayName}: ${i.total} ${i.unit}`)
+      .join("\n");
+    sections.push(
+      `**<@${userId}>**\n__Wygrywane oferty:__\n${offersList}\n__Przedmioty do dostarczenia:__\n${itemsList}`
+    );
+  }
+
+  const embed = new EmbedBuilder()
+    .setTitle("Podsumowanie licytacji")
+    .setColor(0x5865f2)
+    .setDescription(sections.join("\n\n"))
+    .setTimestamp();
+
+  await interaction.editReply({ embeds: [embed] });
 }

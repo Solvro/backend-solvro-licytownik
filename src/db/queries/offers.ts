@@ -41,3 +41,7 @@ export async function getOfferById(offerId: number): Promise<OfferRow | undefine
   const rows = await db.select().from(offers).where(eq(offers.id, offerId));
   return rows[0];
 }
+
+export async function getAllOffers(): Promise<OfferRow[]> {
+  return await db.select().from(offers);
+}
