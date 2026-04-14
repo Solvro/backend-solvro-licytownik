@@ -499,13 +499,36 @@ async function handleBidsSummary(interaction: ChatInputCommandInteraction) {
     );
   }
 
-  const embed = new EmbedBuilder()
-    .setTitle("Podsumowanie licytacji")
-    .setColor(0x5865f2)
-    .setDescription(sections.join("\n\n"))
-    .setTimestamp();
+  const MAX_DESC = 4000;
+  const pages: string[] = [];
+  let current = "";
+  for (const section of sections) {
+    if (current.length + section.length + 2 > MAX_DESC) {
+      if (current) pages.push(current);
+      current = section;
+    } else {
+      current = current ? `${current}\n\n${section}` : section;
+    }
+  }
+  if (current) pages.push(current);
 
-  await interaction.editReply({ embeds: [embed] });
+  for (let i = 0; i < pages.length; i++) {
+    const embed = new EmbedBuilder()
+      .setTitle(
+        pages.length > 1
+          ? `Podsumowanie licytacji (${i + 1}/${pages.length})`
+          : "Podsumowanie licytacji"
+      )
+      .setColor(0x5865f2)
+      .setDescription(pages[i]);
+    if (i === pages.length - 1) embed.setTimestamp();
+
+    if (i === 0) {
+      await interaction.editReply({ embeds: [embed] });
+    } else {
+      await interaction.followUp({ embeds: [embed], ephemeral: true });
+    }
+  }
 }
 
 async function handleAutoClose(interaction: ChatInputCommandInteraction) {
