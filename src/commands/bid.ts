@@ -2,11 +2,16 @@ import {
   SlashCommandBuilder,
   ChatInputCommandInteraction,
   AutocompleteInteraction,
+  MessageFlags,
 } from "discord.js";
 import type { Command } from "../types/command.js";
-import { config } from "../config.js";
 import { getAllItems, getItemBySlug } from "../db/queries/items.js";
-import { getGlobalUsage, getLastBidder, insertBid } from "../db/queries/bids.js";
+import { requireForumThread } from "../utils/guards.js";
+import {
+  getGlobalUsageAll,
+  getLastBidder,
+  insertBidWithLimitCheck,
+} from "../db/queries/bids.js";
 import { getOfferByThreadId, createOffer } from "../db/queries/offers.js";
 import { isBiddingEnabled } from "../db/queries/settings.js";
 import { updateSummaryMessage } from "../utils/summary.js";
@@ -34,11 +39,15 @@ export const bidCommand: Command = {
   async autocomplete(interaction: AutocompleteInteraction) {
     const focused = interaction.options.getFocused().toLowerCase();
     const allItems = await getAllItems();
+    const usageRows = await getGlobalUsageAll();
+    const usageMap = new Map<number, number>(
+      usageRows.map((u: { itemId: number; total: number }) => [u.itemId, Number(u.total)])
+    );
 
     const available: ItemRow[] = [];
     for (const item of allItems) {
       if (item.maxQuantity > 0) {
-        const used = await getGlobalUsage(item.id);
+        const used = usageMap.get(item.id) ?? 0;
         if (used >= item.maxQuantity) continue;
       }
       if (
@@ -58,23 +67,13 @@ export const bidCommand: Command = {
   },
 
   async execute(interaction: ChatInputCommandInteraction) {
-    const channel = interaction.channel;
-    if (
-      !channel ||
-      !channel.isThread() ||
-      channel.parentId !== config.FORUM_CHANNEL_ID
-    ) {
-      await interaction.reply({
-        content: "Ta komenda dziala tylko w watkach na kanale licytacji.",
-        ephemeral: true,
-      });
-      return;
-    }
+    const channel = await requireForumThread(interaction);
+    if (!channel) return;
 
     if (!(await isBiddingEnabled())) {
       await interaction.reply({
         content: "Licytacja jest obecnie wylaczona.",
-        ephemeral: true,
+        flags: MessageFlags.Ephemeral,
       });
       return;
     }
@@ -85,7 +84,7 @@ export const bidCommand: Command = {
     if (quantity < 1) {
       await interaction.reply({
         content: "Ilosc musi byc >= 1.",
-        ephemeral: true,
+        flags: MessageFlags.Ephemeral,
       });
       return;
     }
@@ -94,25 +93,9 @@ export const bidCommand: Command = {
     if (!item) {
       await interaction.reply({
         content: `Przedmiot "${slug}" nie istnieje.`,
-        ephemeral: true,
+        flags: MessageFlags.Ephemeral,
       });
       return;
-    }
-
-    // Check global limit
-    if (item.maxQuantity > 0) {
-      const used = await getGlobalUsage(item.id);
-      const remaining = item.maxQuantity - used;
-      if (quantity > remaining) {
-        await interaction.reply({
-          content:
-            remaining <= 0
-              ? `${item.emoji ?? ""} **${item.displayName}** osiagnal globalny limit (${item.maxQuantity} ${item.unit}). Wybierz inny przedmiot.`
-              : `${item.emoji ?? ""} **${item.displayName}**: mozesz zalicytowac max ${remaining} ${item.unit} (uzyto ${used}/${item.maxQuantity} globalnie).`,
-          ephemeral: true,
-        });
-        return;
-      }
     }
 
     // Lazy-create offer if bot missed threadCreate
@@ -124,7 +107,7 @@ export const bidCommand: Command = {
     if (offer.status === "closed") {
       await interaction.reply({
         content: "Ta oferta jest zamknieta. Licytacja zakonczona.",
-        ephemeral: true,
+        flags: MessageFlags.Ephemeral,
       });
       return;
     }
@@ -135,7 +118,25 @@ export const bidCommand: Command = {
       interaction.user.displayName ??
       interaction.user.username;
     const previousWinner = await getLastBidder(offer.id);
-    await insertBid(offer.id, interaction.user.id, userName, item.id, quantity);
+    const result = await insertBidWithLimitCheck(
+      offer.id,
+      interaction.user.id,
+      userName,
+      item.id,
+      quantity,
+      item.maxQuantity
+    );
+    if (!result.ok) {
+      const { used, remaining } = result;
+      await interaction.reply({
+        content:
+          remaining <= 0
+            ? `${item.emoji ?? ""} **${item.displayName}** osiagnal globalny limit (${item.maxQuantity} ${item.unit}). Wybierz inny przedmiot.`
+            : `${item.emoji ?? ""} **${item.displayName}**: mozesz zalicytowac max ${remaining} ${item.unit} (uzyto ${used}/${item.maxQuantity} globalnie).`,
+        flags: MessageFlags.Ephemeral,
+      });
+      return;
+    }
 
     let content = `${item.emoji ?? ""} **${userName}** licytuje +${quantity} ${item.displayName}`;
     if (previousWinner && previousWinner.userId !== interaction.user.id) {

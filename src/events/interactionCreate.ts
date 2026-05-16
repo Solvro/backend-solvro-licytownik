@@ -1,4 +1,4 @@
-import { Client, Events } from "discord.js";
+import { Client, Events, MessageFlags } from "discord.js";
 
 export function registerInteractionEvent(client: Client) {
   client.on(Events.InteractionCreate, async (interaction) => {
@@ -22,11 +22,11 @@ export function registerInteractionEvent(client: Client) {
       await command.execute(interaction);
     } catch (error) {
       console.error(`Command error for ${interaction.commandName}:`, error);
-      const reply = { content: "Wystapil blad przy wykonywaniu komendy.", ephemeral: true };
+      const content = "Wystapil blad przy wykonywaniu komendy.";
       if (interaction.replied || interaction.deferred) {
-        await interaction.followUp(reply);
+        await interaction.followUp({ content, flags: MessageFlags.Ephemeral });
       } else {
-        await interaction.reply(reply);
+        await interaction.reply({ content, flags: MessageFlags.Ephemeral });
       }
     }
   });

@@ -18,3 +18,18 @@ export async function isBiddingEnabled(): Promise<boolean> {
   const value = await getSetting("bidding_enabled");
   return value !== "false";
 }
+
+const FORUM_CHANNEL_KEY = "forum_channel_id";
+let cachedForumChannelId: string | null | undefined = undefined;
+
+export async function getForumChannelId(): Promise<string | null> {
+  if (cachedForumChannelId !== undefined) return cachedForumChannelId;
+  const value = await getSetting(FORUM_CHANNEL_KEY);
+  cachedForumChannelId = value && value.length > 0 ? value : null;
+  return cachedForumChannelId;
+}
+
+export async function setForumChannelId(id: string): Promise<void> {
+  await setSetting(FORUM_CHANNEL_KEY, id);
+  cachedForumChannelId = id;
+}

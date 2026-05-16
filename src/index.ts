@@ -7,11 +7,15 @@ import { registerThreadCreateEvent } from "./events/threadCreate.js";
 import { seedItems } from "./db/seed.js";
 import { db, isPostgres } from "./db/index.js";
 import { startAutoCloseLoop } from "./utils/auto-close.js";
+import { getForumChannelId, setForumChannelId } from "./db/queries/settings.js";
 
 // Run migrations
 if (isPostgres) {
   const { migrate } = await import("drizzle-orm/postgres-js/migrator");
-  await migrate(db, { migrationsFolder: "./drizzle-pg" });
+  await migrate(
+    db as unknown as Parameters<typeof migrate>[0],
+    { migrationsFolder: "./drizzle-pg" }
+  );
 } else {
   const { migrate } = await import("drizzle-orm/better-sqlite3/migrator");
   migrate(db, { migrationsFolder: "./drizzle" });
@@ -19,6 +23,15 @@ if (isPostgres) {
 
 // Seed default items
 await seedItems();
+
+// Bootstrap forum channel id from env if setting not yet present
+{
+  const existing = await getForumChannelId();
+  if (!existing && config.FORUM_CHANNEL_ID) {
+    await setForumChannelId(config.FORUM_CHANNEL_ID);
+    console.log("Zaseedowano forum_channel_id z env.");
+  }
+}
 
 // Register commands
 for (const command of commands) {

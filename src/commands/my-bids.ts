@@ -1,7 +1,12 @@
-import { SlashCommandBuilder, ChatInputCommandInteraction, EmbedBuilder } from "discord.js";
+import { SlashCommandBuilder, ChatInputCommandInteraction, EmbedBuilder, MessageFlags } from "discord.js";
 import type { Command } from "../types/command.js";
 import { config } from "../config.js";
-import { getUserOfferIds, getLastBidder, getAggregateBids } from "../db/queries/bids.js";
+import { getUserOfferIds, getAllBidsWithItems } from "../db/queries/bids.js";
+import {
+  aggregateItemsForWinningUser,
+  winnerByOffer,
+  type BidWithItem,
+} from "../utils/aggregate.js";
 
 export const myBidsCommand: Command = {
   data: new SlashCommandBuilder()
@@ -15,41 +20,23 @@ export const myBidsCommand: Command = {
     if (userOffers.length === 0) {
       await interaction.reply({
         content: "Nie licytowales jeszcze w zadnej ofercie.",
-        ephemeral: true,
+        flags: MessageFlags.Ephemeral,
       });
       return;
     }
 
+    const allBids = (await getAllBidsWithItems()) as BidWithItem[];
+    const winners = winnerByOffer(allBids);
+
     const lines: string[] = [];
-    const owned = new Map<
-      number,
-      { displayName: string; emoji: string | null; unit: string; total: number }
-    >();
     for (const offer of userOffers) {
-      const lastBidder = await getLastBidder(offer.offerId);
-      const isWinner = lastBidder?.userId === userId;
+      const isWinner = winners.get(offer.offerId)?.userId === userId;
       const status = isWinner ? "**Wygrywasz**" : "Przebity/a";
       const link = `https://discord.com/channels/${config.GUILD_ID}/${offer.forumPostId}`;
       lines.push(`${isWinner ? "🏆" : "❌"} [${offer.title}](${link}) — ${status}`);
-
-      if (isWinner) {
-        const agg = await getAggregateBids(offer.offerId);
-        for (const row of agg) {
-          const existing = owned.get(row.itemId);
-          const qty = Number(row.totalQuantity);
-          if (existing) {
-            existing.total += qty;
-          } else {
-            owned.set(row.itemId, {
-              displayName: row.displayName,
-              emoji: row.emoji,
-              unit: row.unit,
-              total: qty,
-            });
-          }
-        }
-      }
     }
+
+    const owned = aggregateItemsForWinningUser(allBids, userId);
 
     const embed = new EmbedBuilder()
       .setTitle("Twoje licytacje")
@@ -67,6 +54,6 @@ export const myBidsCommand: Command = {
       });
     }
 
-    await interaction.reply({ embeds: [embed], ephemeral: true });
+    await interaction.reply({ embeds: [embed], flags: MessageFlags.Ephemeral });
   },
 };
