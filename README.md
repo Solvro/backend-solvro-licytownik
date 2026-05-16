@@ -1,6 +1,6 @@
 # Licytownik - Solvro Auction Bot
 
-Discord bot for running licitations (auctions) in a student organization. Items are auctioned not for money, but for goods needed at integrations (beer, snacks, drinks, etc.).
+Discord bot for running licitations (auctions) in a student organization. Items are auctioned not for money, but for goods needed at integrations (beer, snacks, drinks, etc.). Ideal before internal events. Made for spring 2026 integraion retreat by Dawid Linek. 
 
 ## How it works
 
