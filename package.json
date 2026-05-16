@@ -5,10 +5,12 @@
   "type": "module",
   "main": "dist/index.js",
   "scripts": {
-    "dev": "tsx src/index.ts",
+    "dev": "tsx --env-file=.env src/index.ts",
+    "test": "vitest run",
+    "test:watch": "vitest",
     "build": "tsup src/index.ts --format esm",
     "start": "node dist/index.js",
-    "deploy-commands": "tsx src/utils/deploy-commands.ts",
+    "deploy-commands": "tsx --env-file=.env src/utils/deploy-commands.ts",
     "db:generate": "drizzle-kit generate --config=drizzle.config.ts",
     "db:generate:pg": "drizzle-kit generate --config=drizzle.pg.config.ts",
     "db:migrate": "drizzle-kit migrate --config=drizzle.config.ts",
@@ -33,6 +35,7 @@
     "drizzle-kit": "^0.31.10",
     "tsup": "^8.5.1",
     "tsx": "^4.21.0",
-    "typescript": "^6.0.2"
+    "typescript": "^6.0.2",
+    "vitest": "^4.1.6"
   }
 }
